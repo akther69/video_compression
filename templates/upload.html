@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Video Compressor</title>
+
+    <style>
+
+        body{
+
+            background: #111;
+            color: white;
+
+            font-family: Arial;
+
+            display: flex;
+
+            justify-content: center;
+            align-items: center;
+
+            height: 100vh;
+        }
+
+        .container{
+
+            width: 450px;
+
+            background: #1e1e1e;
+
+            padding: 30px;
+
+            border-radius: 10px;
+
+            text-align: center;
+        }
+
+        input{
+
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+
+        button{
+
+            background: #00b894;
+
+            color: white;
+
+            border: none;
+
+            padding: 12px 20px;
+
+            border-radius: 5px;
+
+            cursor: pointer;
+        }
+
+        button:hover{
+
+            background: #00a383;
+        }
+
+        a{
+
+            color: #00cec9;
+
+            text-decoration: none;
+
+            font-size: 18px;
+        }
+
+        .error{
+
+            color: red;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>Video Compressor</h1>
+
+        <p>Upload videos up to 1GB</p>
+
+        {% if error %}
+
+            <p class="error">
+                {{ error }}
+            </p>
+
+        {% endif %}
+
+        <form method="POST"
+              enctype="multipart/form-data">
+
+            {% csrf_token %}
+
+            <input type="file"
+                   name="video"
+                   required>
+
+            <br>
+
+            <button type="submit">
+
+                Compress Video
+
+            </button>
+
+        </form>
+
+        <br>
+
+        {% if download_url %}
+
+            <a href="{{ download_url }}" download>
+
+                Download Compressed Video
+
+            </a>
+
+        {% endif %}
+
+    </div>
+
+</body>
+
+</html>
