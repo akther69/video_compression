@@ -4,15 +4,25 @@ from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
 
-from compressor.views import upload_video
-
+from compressor.views import (
+    home,
+    compress_video,
+    get_progress
+)
 
 urlpatterns = [
 
-    path('admin/', admin.site.urls),
+    path('', home),
 
-    path('', upload_video, name='upload_video'),
+    path(
+        'compress/',
+        compress_video
+    ),
 
+    path(
+        'progress/<str:task_id>/',
+        get_progress
+    ),
 ]
 
 urlpatterns += static(

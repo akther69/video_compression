@@ -1,0 +1,7 @@
+media/
+*.mp4
+*.mov
+*.avi
+__pycache__/
+db.sqlite3
+staticfiles/

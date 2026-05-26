@@ -1,12 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 
 <head>
-
-    <meta charset="UTF-8">
-
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
 
     <title>Video Compressor</title>
 
@@ -14,70 +9,78 @@
 
         body{
 
-            background: #111;
-            color: white;
+            background:#0f172a;
 
-            font-family: Arial;
+            color:white;
 
-            display: flex;
+            font-family:Arial;
 
-            justify-content: center;
-            align-items: center;
+            display:flex;
 
-            height: 100vh;
+            justify-content:center;
+
+            align-items:center;
+
+            height:100vh;
         }
 
         .container{
 
-            width: 450px;
+            width:500px;
 
-            background: #1e1e1e;
+            background:#111827;
 
-            padding: 30px;
+            padding:40px;
 
-            border-radius: 10px;
+            border-radius:20px;
 
-            text-align: center;
-        }
-
-        input{
-
-            margin-top: 20px;
-            margin-bottom: 20px;
+            text-align:center;
         }
 
         button{
 
-            background: #00b894;
+            padding:15px 25px;
 
-            color: white;
+            border:none;
 
-            border: none;
+            background:#00b894;
 
-            padding: 12px 20px;
+            color:white;
 
-            border-radius: 5px;
+            border-radius:10px;
 
-            cursor: pointer;
+            cursor:pointer;
         }
 
-        button:hover{
+        #progress-container{
 
-            background: #00a383;
+            margin-top:20px;
+
+            display:none;
         }
 
-        a{
+        #progress-bg{
 
-            color: #00cec9;
+            width:100%;
 
-            text-decoration: none;
+            height:30px;
 
-            font-size: 18px;
+            background:#1e293b;
+
+            border-radius:50px;
+
+            overflow:hidden;
         }
 
-        .error{
+        #progress-bar{
 
-            color: red;
+            width:0%;
+
+            height:100%;
+
+            background:#00cec9;
+
+            line-height:30px;
         }
 
     </style>
@@ -86,53 +89,138 @@
 
 <body>
 
-    <div class="container">
+<div class="container">
 
-        <h1>Video Compressor</h1>
+    <h1>Video Compressor</h1>
 
-        <p>Upload videos up to 1GB</p>
+    <form id="upload-form">
 
-        {% if error %}
+        {% csrf_token %}
 
-            <p class="error">
-                {{ error }}
-            </p>
+        <input type="file"
+               name="video"
+               required>
 
-        {% endif %}
+        <br><br>
 
-        <form method="POST"
-              enctype="multipart/form-data">
+        <button type="submit">
 
-            {% csrf_token %}
+            Compress Video
 
-            <input type="file"
-                   name="video"
-                   required>
+        </button>
 
-            <br>
+    </form>
 
-            <button type="submit">
-
-                Compress Video
-
-            </button>
-
-        </form>
+    <div id="progress-container">
 
         <br>
 
-        {% if download_url %}
+        <div id="progress-bg">
 
-            <a href="{{ download_url }}" download>
+            <div id="progress-bar">
 
-                Download Compressed Video
+                0%
 
-            </a>
+            </div>
 
-        {% endif %}
+        </div>
 
     </div>
 
+    <br>
+
+    <div id="download-section"></div>
+
+</div>
+
+<script>
+
+const form =
+    document.getElementById(
+        "upload-form"
+    );
+
+form.addEventListener(
+    "submit",
+    async function(e){
+
+    e.preventDefault();
+
+    document.getElementById(
+        "progress-container"
+    ).style.display = "block";
+
+    const formData =
+        new FormData(form);
+
+    const response =
+        await fetch(
+            "/compress/",
+            {
+                method:"POST",
+                body:formData
+            }
+        );
+
+    const data =
+        await response.json();
+
+    const taskId =
+        data.task_id;
+
+    const interval =
+        setInterval(async ()=>{
+
+        const progressResponse =
+            await fetch(
+                `/progress/${taskId}/`
+            );
+
+        const progressData =
+            await progressResponse.json();
+
+        const progress =
+            progressData.progress;
+
+        const progressBar =
+            document.getElementById(
+                "progress-bar"
+            );
+
+        progressBar.style.width =
+            progress + "%";
+
+        progressBar.innerHTML =
+            progress + "%";
+
+        if(progress >= 100){
+
+            clearInterval(interval);
+
+            document.getElementById(
+                "download-section"
+            ).innerHTML = `
+
+                <br>
+
+                <a href="${progressData.download_url}"
+                   download
+                   style="
+                     color:#00cec9;
+                     font-size:20px;
+                   ">
+
+                    Download Video
+
+                </a>
+            `;
+        }
+
+    }, 1000);
+
+});
+
+</script>
 </body>
 
 </html>

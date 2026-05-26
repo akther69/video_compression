@@ -1,148 +1,248 @@
 import os
+import re
 import uuid
+import threading
 import subprocess
 
+from django.http import JsonResponse
 from django.shortcuts import render
 from django.conf import settings
 
 
-def upload_video(request):
+compression_progress = {}
 
-    download_url = None
-    error = None
-    success = None
+download_links = {}
+
+
+def home(request):
+
+    return render(request, "upload.html")
+
+
+def get_video_duration(input_path):
+
+    command = [
+        "ffmpeg",
+        "-i",
+        input_path
+    ]
+
+    result = subprocess.run(
+        command,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    output = result.stderr
+
+    duration_match = re.search(
+        r"Duration: (\d+):(\d+):(\d+\.\d+)",
+        output
+    )
+
+    if duration_match:
+
+        hours = int(duration_match.group(1))
+        minutes = int(duration_match.group(2))
+        seconds = float(duration_match.group(3))
+
+        total_seconds = (
+            hours * 3600
+            + minutes * 60
+            + seconds
+        )
+
+        return total_seconds
+
+    return 0
+
+
+def compress_video_background(
+    task_id,
+    input_path,
+    output_path,
+    output_filename
+):
+
+    total_duration = get_video_duration(
+        input_path
+    )
+
+    command = [
+
+        "ffmpeg",
+
+        "-i",
+        input_path,
+
+        "-c:v",
+        "libx265",
+
+        "-crf",
+        "28",
+
+        "-preset",
+        "fast",
+
+        "-c:a",
+        "aac",
+
+        "-b:a",
+        "96k",
+
+        output_path
+    ]
+
+    process = subprocess.Popen(
+
+        command,
+
+        stderr=subprocess.PIPE,
+
+        universal_newlines=True
+    )
+
+    for line in process.stderr:
+
+        time_match = re.search(
+            r"time=(\d+):(\d+):(\d+\.\d+)",
+            line
+        )
+
+        if time_match:
+
+            hours = int(time_match.group(1))
+            minutes = int(time_match.group(2))
+            seconds = float(time_match.group(3))
+
+            current_seconds = (
+                hours * 3600
+                + minutes * 60
+                + seconds
+            )
+
+            percentage = int(
+                (
+                    current_seconds
+                    / total_duration
+                ) * 100
+            )
+
+            compression_progress[
+                task_id
+            ] = percentage
+
+    process.wait()
+
+    compression_progress[
+        task_id
+    ] = 100
+
+    download_links[task_id] = (
+        settings.MEDIA_URL
+        + "compressed/"
+        + output_filename
+    )
+
+    if os.path.exists(input_path):
+
+        os.remove(input_path)
+
+
+def compress_video(request):
 
     if request.method == "POST":
 
         video = request.FILES.get("video")
 
-        if video:
+        if not video:
 
-            # 10GB upload limit
-            if video.size > 10 * 1024 * 1024 * 1024:
+            return JsonResponse({
+                "error": "No video uploaded"
+            })
 
-                error = "File size exceeds 10GB"
+        task_id = str(uuid.uuid4())
 
-                return render(request, "upload.html", {
-                    "error": error
-                })
+        input_filename = (
+            f"{task_id}_{video.name}"
+        )
 
-            try:
+        input_path = os.path.join(
+            settings.MEDIA_ROOT,
+            "uploads",
+            input_filename
+        )
 
-                # Generate unique filename
-                unique_id = str(uuid.uuid4())
+        os.makedirs(
+            os.path.dirname(input_path),
+            exist_ok=True
+        )
 
-                input_filename = f"{unique_id}_{video.name}"
+        with open(input_path, "wb+") as destination:
 
-                input_path = os.path.join(
-                    settings.MEDIA_ROOT,
-                    "uploads",
-                    input_filename
-                )
+            for chunk in video.chunks():
 
-                # Create upload folder
-                os.makedirs(
-                    os.path.dirname(input_path),
-                    exist_ok=True
-                )
+                destination.write(chunk)
 
-                # Save uploaded video
-                with open(input_path, "wb+") as destination:
+        output_filename = (
+            f"compressed_{input_filename}"
+        )
 
-                    for chunk in video.chunks():
+        output_path = os.path.join(
+            settings.MEDIA_ROOT,
+            "compressed",
+            output_filename
+        )
 
-                        destination.write(chunk)
+        os.makedirs(
+            os.path.dirname(output_path),
+            exist_ok=True
+        )
 
-                # Output filename
-                output_filename = (
-                    f"compressed_{input_filename}"
-                )
+        compression_progress[
+            task_id
+        ] = 0
 
-                output_path = os.path.join(
-                    settings.MEDIA_ROOT,
-                    "compressed",
-                    output_filename
-                )
+        # START BACKGROUND THREAD
+        thread = threading.Thread(
 
-                # Create compressed folder
-                os.makedirs(
-                    os.path.dirname(output_path),
-                    exist_ok=True
-                )
+            target=compress_video_background,
 
-                # FFmpeg path
-                ffmpeg_path = "ffmpeg"
+            args=(
+                task_id,
+                input_path,
+                output_path,
+                output_filename
+            )
+        )
 
-                # FFmpeg compression command
-                command = [
+        thread.start()
 
-                    ffmpeg_path,
+        return JsonResponse({
 
-                    "-i",
-                    input_path,
+            "task_id": task_id
+        })
 
-                    "-c:v",
-                    "libx265",
+    return JsonResponse({
+        "error": "Invalid request"
+    })
 
-                    "-crf",
-                    "28",
 
-                    "-preset",
-                    "fast",
+def get_progress(request, task_id):
 
-                    "-c:a",
-                    "aac",
+    progress = compression_progress.get(
+        task_id,
+        0
+    )
 
-                    "-b:a",
-                    "96k",
+    download_url = download_links.get(
+        task_id,
+        None
+    )
 
-                    output_path
-                ]
+    return JsonResponse({
 
-                # Run FFmpeg
-                result = subprocess.run(
-                    command,
-                    capture_output=True,
-                    text=True
-                )
+        "progress": progress,
 
-                # Compression failed
-                if result.returncode != 0:
-
-                    error = (
-                        "Compression failed: "
-                        + result.stderr
-                    )
-
-                    return render(request, "upload.html", {
-                        "error": error
-                    })
-
-                # Delete original uploaded file
-                if os.path.exists(input_path):
-
-                    os.remove(input_path)
-
-                # Download link
-                download_url = (
-                    settings.MEDIA_URL
-                    + "compressed/"
-                    + output_filename
-                )
-
-                success = (
-                    "Video compressed successfully!"
-                )
-
-            except Exception as e:
-
-                error = str(e)
-
-    return render(request, "upload.html", {
-
-        "download_url": download_url,
-
-        "error": error,
-
-        "success": success
+        "download_url": download_url
     })
